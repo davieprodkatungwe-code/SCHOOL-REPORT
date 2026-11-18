@@ -206,3 +206,16 @@ class SubjectAttendance(Base):
     class_ = relationship("Class")
     subject = relationship("Subject")
     recorded_by_user = relationship("User")
+class StudentClassHistory(Base):
+    __tablename__ = "student_class_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    class_id = Column(Integer, ForeignKey("classes.id"), nullable=False)
+    year = Column(Integer, nullable=False)              # e.g. 2025, 2026
+    academic_year = Column(String(20), nullable=True)   # e.g. "2025/2026"
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    student = relationship("Student")
+    class_ = relationship("Class")
