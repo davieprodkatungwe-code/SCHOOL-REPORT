@@ -2,29 +2,25 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 import os
 
-# Database URL
-# - Locally: uses SQLite in the data/ folder
-# - On Railway: set DATABASE_URL environment variable (can still be SQLite or Postgres)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, "data")
-os.makedirs(DATA_DIR, exist_ok=True)
+# Use PostgreSQL on Railway if DATABASE_URL is set, otherwise SQLite locally
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    f"sqlite:///{os.path.join(DATA_DIR, 'school_register.db')}"
-)
+if DATABASE_URL:
+    # Railway / production
+    # Fix for SQLAlchemy if the URL starts with postgres://
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# Railway sometimes provides postgres:// which SQLAlchemy needs as postgresql://
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    engine = create_engine(DATABASE_URL)
+else:
+    # Local development
+    os.makedirs("data", exist_ok=True)
+    SQLALCHEMY_DATABASE_URL = "sqlite:///./data/school_register.db"
+    engine = create_engine(
+        SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+    )
 
-connect_args = {}
-if DATABASE_URL.startswith("sqlite"):
-    connect_args = {"check_same_thread": False}
-
-engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 Base = declarative_base()
 
 
