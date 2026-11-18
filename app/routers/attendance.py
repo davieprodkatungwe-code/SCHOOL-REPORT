@@ -611,22 +611,47 @@ async def create_student(
     }
 
 
-@router.delete("/students/{student_id}")
-async def delete_student(
+@router.put("/students/{student_id}")
+async def update_student(
     student_id: int,
+    payload: schemas.StudentCreate,
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(auth.get_current_user)
 ):
-    """Delete a student (or deactivate)."""
+    """Edit an existing student's details."""
     student = db.query(models.Student).filter(models.Student.id == student_id).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    # Soft delete (safer)
-    student.is_active = False
-    db.commit()
+    # Check admission number is not used by another student
+    existing = db.query(models.Student).filter(
+        models.Student.admission_number == payload.admission_number,
+        models.Student.id != student_id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Admission number already used by another student")
 
-    return {"message": f"Student {student.full_name} removed successfully"}
+    # Check class exists
+    class_obj = db.query(models.Class).filter(models.Class.id == payload.class_id).first()
+    if not class_obj:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    student.admission_number = payload.admission_number
+    student.first_name = payload.first_name
+    student.last_name = payload.last_name
+    student.class_id = payload.class_id
+    student.gender = payload.gender
+    student.parent_phone = payload.parent_phone
+    student.parent_name = payload.parent_name
+
+    db.commit()
+    db.refresh(student)
+
+    return {
+        "message": "Student updated successfully",
+        "id": student.id,
+        "full_name": student.full_name
+    }
 
     
 @router.put("/classes/{class_id}/form-teacher")
