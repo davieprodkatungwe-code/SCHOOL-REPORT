@@ -705,3 +705,87 @@ async def get_classes_with_teachers(
             "form_teacher_name": c.form_teacher.full_name if c.form_teacher else None
         })
     return result
+
+@router.post("/students/{student_id}/transfer")
+async def transfer_student(
+    student_id: int,
+    new_class_id: int = Query(...),
+    year: int = Query(...),
+    academic_year: str = Query(None),
+    notes: str = Query(None),
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """
+    Move a student to a new class and save the old class in history.
+    Example: after 3 terms, promote Form 1 student to Form 2.
+    """
+    student = db.query(models.Student).filter(models.Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    new_class = db.query(models.Class).filter(models.Class.id == new_class_id).first()
+    if not new_class:
+        raise HTTPException(status_code=404, detail="New class not found")
+
+    if student.class_id == new_class_id:
+        raise HTTPException(status_code=400, detail="Student is already in that class")
+
+    # Save current class into history
+    history = models.StudentClassHistory(
+        student_id=student.id,
+        class_id=student.class_id,
+        year=year,
+        academic_year=academic_year or str(year),
+        notes=notes or f"Transferred from previous class"
+    )
+    db.add(history)
+
+    # Move student to new class
+    old_class_name = student.class_.name if student.class_ else "Unknown"
+    student.class_id = new_class_id
+    db.commit()
+
+    return {
+        "message": f"{student.full_name} moved from {old_class_name} to {new_class.name}. History saved for year {year}.",
+        "student_id": student.id,
+        "new_class": new_class.name
+    }
+
+
+@router.get("/students/{student_id}/history")
+async def get_student_history(
+    student_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Get the class history of a student (which classes they attended and in which year)."""
+    student = db.query(models.Student).filter(models.Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    history = (
+        db.query(models.StudentClassHistory)
+        .filter(models.StudentClassHistory.student_id == student_id)
+        .order_by(models.StudentClassHistory.year.desc())
+        .all()
+    )
+
+    result = []
+    for h in history:
+        result.append({
+            "id": h.id,
+            "class_name": h.class_.name if h.class_ else "Unknown",
+            "year": h.year,
+            "academic_year": h.academic_year,
+            "notes": h.notes,
+            "recorded_at": h.created_at
+        })
+
+    return {
+        "student_id": student.id,
+        "full_name": student.full_name,
+        "admission_number": student.admission_number,
+        "current_class": student.class_.name if student.class_ else None,
+        "history": result
+    }
