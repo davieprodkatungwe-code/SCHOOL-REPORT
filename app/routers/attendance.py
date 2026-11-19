@@ -1,6 +1,8 @@
 from datetime import date, datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from openpyxl import load_workbook
+from io import BytesIO
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from .. import models, schemas, auth, database
@@ -788,4 +790,97 @@ async def get_student_history(
         "admission_number": student.admission_number,
         "current_class": student.class_.name if student.class_ else None,
         "history": result
+    }
+@router.post("/students/import-excel")
+async def import_students_excel(
+    class_id: int = Query(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Import students from an Excel file into a selected class."""
+    class_obj = db.query(models.Class).filter(models.Class.id == class_id).first()
+    if not class_obj:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    if not file.filename.lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="Please upload an Excel file (.xlsx)")
+
+    content = await file.read()
+    try:
+        wb = load_workbook(filename=BytesIO(content), data_only=True)
+        ws = wb.active
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not read Excel file")
+
+    # Read header row
+    headers = {}
+    for col in range(1, ws.max_column + 1):
+        value = ws.cell(1, col).value
+        if value:
+            headers[str(value).strip().lower()] = col
+
+    required = ["admission_number", "first_name", "last_name"]
+    for r in required:
+        if r not in headers:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing column '{r}' in Excel. Required columns: admission_number, first_name, last_name"
+            )
+
+    added = 0
+    skipped = 0
+    errors = []
+
+    for row in range(2, ws.max_row + 1):
+        admission_number = str(ws.cell(row, headers["admission_number"]).value or "").strip()
+        first_name = str(ws.cell(row, headers["first_name"]).value or "").strip()
+        last_name = str(ws.cell(row, headers["last_name"]).value or "").strip()
+
+        if not admission_number and not first_name and not last_name:
+            continue
+
+        if not admission_number or not first_name or not last_name:
+            errors.append(f"Row {row}: missing required fields")
+            skipped += 1
+            continue
+
+        existing = db.query(models.Student).filter(
+            models.Student.admission_number == admission_number
+        ).first()
+        if existing:
+            skipped += 1
+            continue
+
+        gender = None
+        parent_phone = None
+        parent_name = None
+
+        if "gender" in headers:
+            gender = str(ws.cell(row, headers["gender"]).value or "").strip() or None
+        if "parent_phone" in headers:
+            parent_phone = str(ws.cell(row, headers["parent_phone"]).value or "").strip() or None
+        if "parent_name" in headers:
+            parent_name = str(ws.cell(row, headers["parent_name"]).value or "").strip() or None
+
+        student = models.Student(
+            admission_number=admission_number,
+            first_name=first_name,
+            last_name=last_name,
+            class_id=class_id,
+            gender=gender,
+            parent_phone=parent_phone,
+            parent_name=parent_name,
+            is_active=True
+        )
+        db.add(student)
+        added += 1
+
+    db.commit()
+
+    return {
+        "message": f"Import finished for {class_obj.name}",
+        "added": added,
+        "skipped": skipped,
+        "errors": errors[:10]
     }
