@@ -102,3 +102,53 @@ async def notifications_page(request: Request):
 @app.get("/change-password", response_class=HTMLResponse)
 async def change_password_page(request: Request):
     return templates.TemplateResponse(request, "change_password.html")
+@app.get("/setup-subjects")
+async def setup_subjects(db: Session = Depends(get_db)):
+    """
+    TEMPORARY: Replace all subjects with the school's exact subject lists.
+    Visit once, then remove this route.
+    """
+    try:
+        # Delete old subjects
+        db.query(models.Subject).delete()
+        db.commit()
+
+        humanities = [
+            "Mathematics",
+            "History",
+            "Agriculture",
+            "Biology",
+            "Social Studies",
+            "Lifeskills",
+            "English",
+            "Geography",
+            "Chichewa",
+        ]
+
+        sciences = [
+            "Chemistry",
+            "Physics",
+            "Biology",
+            "Agriculture",
+            "Mathematics",
+            "Chichewa",
+            "English",
+        ]
+
+        for name in humanities:
+            db.add(models.Subject(name=name, stream="Humanities", is_active=True))
+
+        for name in sciences:
+            db.add(models.Subject(name=name, stream="Sciences", is_active=True))
+
+        db.commit()
+
+        return JSONResponse({
+            "status": "ok",
+            "message": "Subjects updated successfully",
+            "humanities": humanities,
+            "sciences": sciences
+        })
+    except Exception as e:
+        db.rollback()
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
