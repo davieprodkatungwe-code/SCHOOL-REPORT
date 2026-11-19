@@ -4,7 +4,6 @@
 {% block content %}
 <h4 class="fw-bold mb-3 text-navy">Manage Students</h4>
 
-<!-- Select Class -->
 <div class="card mb-3">
     <div class="card-body">
         <label class="form-label small fw-semibold">Select Class</label>
@@ -14,12 +13,13 @@
     </div>
 </div>
 
-<!-- Add New Student Form -->
+<!-- Add / Edit Student Form -->
 <div class="card mb-3">
-    <div class="card-header bg-white fw-semibold text-navy">
+    <div class="card-header bg-white fw-semibold text-navy" id="formTitle">
         <i class="bi bi-person-plus"></i> Add New Student
     </div>
     <div class="card-body">
+        <input type="hidden" id="editStudentId" value="">
         <div class="row g-2">
             <div class="col-6">
                 <label class="form-label small">Admission Number</label>
@@ -49,9 +49,12 @@
                 <label class="form-label small">Parent Name (optional)</label>
                 <input type="text" id="parentName" class="form-control" placeholder="Parent name">
             </div>
-            <div class="col-12 mt-2">
-                <button class="btn btn-primary w-100" onclick="addStudent()">
+            <div class="col-12 mt-2 d-flex gap-2">
+                <button class="btn btn-primary flex-fill" id="saveStudentBtn" onclick="saveStudent()">
                     <i class="bi bi-plus-circle"></i> Add Student
+                </button>
+                <button class="btn btn-outline-secondary d-none" id="cancelEditBtn" onclick="cancelEdit()">
+                    Cancel Edit
                 </button>
             </div>
         </div>
@@ -59,7 +62,7 @@
 </div>
 
 <!-- Students List -->
-<div class="card">
+<div class="card mb-3">
     <div class="card-header bg-white d-flex justify-content-between align-items-center">
         <span class="fw-semibold text-navy" id="classTitle">Students</span>
         <span class="badge bg-navy" id="countBadge">0</span>
@@ -68,19 +71,81 @@
         <div class="list-group-item text-muted text-center">Select a class to view students</div>
     </div>
 </div>
+
+<!-- History Modal -->
+<div class="modal fade" id="historyModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="historyTitle">Class History</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="historyBody">
+                Loading...
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Transfer Modal -->
+<div class="modal fade" id="transferModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Transfer Student to Another Class</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="transferStudentName" class="fw-semibold"></p>
+                <input type="hidden" id="transferStudentId">
+                <div class="mb-3">
+                    <label class="form-label">New Class</label>
+                    <select id="transferClassSelect" class="form-select"></select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Year (e.g. 2026)</label>
+                    <input type="number" id="transferYear" class="form-control" value="2026">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Academic Year (optional)</label>
+                    <input type="text" id="transferAcademicYear" class="form-control" placeholder="2025/2026">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Notes (optional)</label>
+                    <input type="text" id="transferNotes" class="form-control" placeholder="Promoted to next form">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="confirmTransfer()">Transfer & Save History</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+let allClasses = [];
+let currentStudents = [];
+
 async function loadClasses() {
     const res = await api('/api/classes');
-    const classes = await res.json();
+    allClasses = await res.json();
     const select = document.getElementById('classSelect');
-    classes.forEach(c => {
+    const transferSelect = document.getElementById('transferClassSelect');
+    select.innerHTML = '<option value="">Choose a class...</option>';
+    transferSelect.innerHTML = '';
+    allClasses.forEach(c => {
         const opt = document.createElement('option');
         opt.value = c.id;
         opt.textContent = c.name;
         select.appendChild(opt);
+
+        const opt2 = document.createElement('option');
+        opt2.value = c.id;
+        opt2.textContent = c.name;
+        transferSelect.appendChild(opt2);
     });
 }
 
@@ -89,32 +154,75 @@ async function loadStudents() {
     if (!classId) return;
 
     const res = await api(`/api/classes/${classId}/students`);
-    const students = await res.json();
+    currentStudents = await res.json();
 
     document.getElementById('classTitle').textContent = document.getElementById('classSelect').selectedOptions[0].text;
-    document.getElementById('countBadge').textContent = students.length + ' students';
+    document.getElementById('countBadge').textContent = currentStudents.length + ' students';
 
     const list = document.getElementById('studentsList');
-    if (students.length === 0) {
+    if (currentStudents.length === 0) {
         list.innerHTML = '<div class="list-group-item text-muted text-center">No students in this class yet</div>';
         return;
     }
 
-    list.innerHTML = students.map(s => `
-        <div class="list-group-item d-flex justify-content-between align-items-center">
-            <div>
-                <div class="fw-semibold">${s.full_name}</div>
-                <small class="text-muted">${s.admission_number} · ${s.gender || ''} · ${s.parent_phone || ''}</small>
+    list.innerHTML = currentStudents.map(s => `
+        <div class="list-group-item">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="fw-semibold">${s.full_name}</div>
+                    <small class="text-muted">${s.admission_number} · ${s.gender || ''} · ${s.parent_phone || ''}</small>
+                </div>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-primary" title="Edit" onclick='startEdit(${JSON.stringify(s)})'>
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-outline-success" title="Transfer" onclick="openTransfer(${s.id}, '${s.full_name}')">
+                        <i class="bi bi-arrow-right-circle"></i>
+                    </button>
+                    <button class="btn btn-outline-secondary" title="History" onclick="viewHistory(${s.id})">
+                        <i class="bi bi-clock-history"></i>
+                    </button>
+                    <button class="btn btn-outline-danger" title="Remove" onclick="deleteStudent(${s.id}, '${s.full_name}')">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
             </div>
-            <button class="btn btn-sm btn-outline-danger" onclick="deleteStudent(${s.id}, '${s.full_name}')">
-                <i class="bi bi-trash"></i>
-            </button>
         </div>
     `).join('');
 }
 
-async function addStudent() {
+function startEdit(student) {
+    document.getElementById('editStudentId').value = student.id;
+    document.getElementById('admNo').value = student.admission_number || '';
+    document.getElementById('firstName').value = student.first_name || '';
+    document.getElementById('lastName').value = student.last_name || '';
+    document.getElementById('gender').value = student.gender || '';
+    document.getElementById('parentPhone').value = student.parent_phone || '';
+    document.getElementById('parentName').value = student.parent_name || '';
+
+    document.getElementById('formTitle').innerHTML = '<i class="bi bi-pencil"></i> Edit Student';
+    document.getElementById('saveStudentBtn').innerHTML = '<i class="bi bi-save"></i> Update Student';
+    document.getElementById('cancelEditBtn').classList.remove('d-none');
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function cancelEdit() {
+    document.getElementById('editStudentId').value = '';
+    document.getElementById('admNo').value = '';
+    document.getElementById('firstName').value = '';
+    document.getElementById('lastName').value = '';
+    document.getElementById('gender').value = '';
+    document.getElementById('parentPhone').value = '';
+    document.getElementById('parentName').value = '';
+    document.getElementById('formTitle').innerHTML = '<i class="bi bi-person-plus"></i> Add New Student';
+    document.getElementById('saveStudentBtn').innerHTML = '<i class="bi bi-plus-circle"></i> Add Student';
+    document.getElementById('cancelEditBtn').classList.add('d-none');
+}
+
+async function saveStudent() {
     const classId = document.getElementById('classSelect').value;
+    const editId = document.getElementById('editStudentId').value;
     const admNo = document.getElementById('admNo').value.trim();
     const firstName = document.getElementById('firstName').value.trim();
     const lastName = document.getElementById('lastName').value.trim();
@@ -131,32 +239,35 @@ async function addStudent() {
         return;
     }
 
+    const body = {
+        admission_number: admNo,
+        first_name: firstName,
+        last_name: lastName,
+        class_id: parseInt(classId),
+        gender: gender || null,
+        parent_phone: parentPhone || null,
+        parent_name: parentName || null
+    };
+
     try {
-        const res = await api('/api/students', {
-            method: 'POST',
-            body: JSON.stringify({
-                admission_number: admNo,
-                first_name: firstName,
-                last_name: lastName,
-                class_id: parseInt(classId),
-                gender: gender || null,
-                parent_phone: parentPhone || null,
-                parent_name: parentName || null
-            })
-        });
+        let res;
+        if (editId) {
+            res = await api(`/api/students/${editId}`, {
+                method: 'PUT',
+                body: JSON.stringify(body)
+            });
+        } else {
+            res = await api('/api/students', {
+                method: 'POST',
+                body: JSON.stringify(body)
+            });
+        }
+
         const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || 'Failed to add student');
+        if (!res.ok) throw new Error(data.detail || 'Failed to save student');
 
-        alert('Student added: ' + data.full_name);
-
-        // Clear form
-        document.getElementById('admNo').value = '';
-        document.getElementById('firstName').value = '';
-        document.getElementById('lastName').value = '';
-        document.getElementById('gender').value = '';
-        document.getElementById('parentPhone').value = '';
-        document.getElementById('parentName').value = '';
-
+        alert(data.message || 'Saved successfully');
+        cancelEdit();
         loadStudents();
     } catch (err) {
         alert('Error: ' + err.message);
@@ -170,11 +281,82 @@ async function deleteStudent(id, name) {
         const res = await api(`/api/students/${id}`, { method: 'DELETE' });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Failed to delete');
-
         alert(data.message);
         loadStudents();
     } catch (err) {
         alert('Error: ' + err.message);
+    }
+}
+
+function openTransfer(id, name) {
+    document.getElementById('transferStudentId').value = id;
+    document.getElementById('transferStudentName').textContent = name;
+    document.getElementById('transferYear').value = new Date().getFullYear();
+    new bootstrap.Modal(document.getElementById('transferModal')).show();
+}
+
+async function confirmTransfer() {
+    const studentId = document.getElementById('transferStudentId').value;
+    const newClassId = document.getElementById('transferClassSelect').value;
+    const year = document.getElementById('transferYear').value;
+    const academicYear = document.getElementById('transferAcademicYear').value.trim();
+    const notes = document.getElementById('transferNotes').value.trim();
+
+    if (!newClassId || !year) {
+        alert('Please select new class and year');
+        return;
+    }
+
+    try {
+        let url = `/api/students/${studentId}/transfer?new_class_id=${newClassId}&year=${year}`;
+        if (academicYear) url += `&academic_year=${encodeURIComponent(academicYear)}`;
+        if (notes) url += `&notes=${encodeURIComponent(notes)}`;
+
+        const res = await api(url, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Transfer failed');
+
+        alert(data.message);
+        bootstrap.Modal.getInstance(document.getElementById('transferModal')).hide();
+        loadStudents();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+async function viewHistory(studentId) {
+    const modal = new bootstrap.Modal(document.getElementById('historyModal'));
+    document.getElementById('historyBody').innerHTML = 'Loading...';
+    modal.show();
+
+    try {
+        const res = await api(`/api/students/${studentId}/history`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to load history');
+
+        document.getElementById('historyTitle').textContent = `History – ${data.full_name}`;
+
+        if (!data.history || data.history.length === 0) {
+            document.getElementById('historyBody').innerHTML = `
+                <p><strong>Current class:</strong> ${data.current_class || 'N/A'}</p>
+                <p class="text-muted">No previous class history yet.</p>
+            `;
+            return;
+        }
+
+        document.getElementById('historyBody').innerHTML = `
+            <p><strong>Current class:</strong> ${data.current_class || 'N/A'}</p>
+            <hr>
+            ${data.history.map(h => `
+                <div class="mb-2">
+                    <div class="fw-semibold">${h.class_name}</div>
+                    <small class="text-muted">Year: ${h.year}${h.academic_year ? ' (' + h.academic_year + ')' : ''}</small>
+                    ${h.notes ? `<div class="small">${h.notes}</div>` : ''}
+                </div>
+            `).join('')}
+        `;
+    } catch (err) {
+        document.getElementById('historyBody').innerHTML = `<div class="text-danger">${err.message}</div>`;
     }
 }
 
