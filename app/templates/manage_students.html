@@ -139,17 +139,17 @@
 let allClasses = [];
 let currentStudents = [];
 
+function getDisplayName(s) {
+    if (s.full_name && String(s.full_name).trim()) return String(s.full_name).trim();
+    return (String(s.first_name || '').trim() + ' ' + String(s.last_name || '').trim()).trim();
+}
+
 function sortStudents(students) {
     return students.slice().sort(function(a, b) {
-        var aLast = (a.last_name || '').toLowerCase();
-        var bLast = (b.last_name || '').toLowerCase();
-        if (aLast < bLast) return -1;
-        if (aLast > bLast) return 1;
-
-        var aFirst = (a.first_name || '').toLowerCase();
-        var bFirst = (b.first_name || '').toLowerCase();
-        if (aFirst < bFirst) return -1;
-        if (aFirst > bFirst) return 1;
+        var an = getDisplayName(a).toLowerCase();
+        var bn = getDisplayName(b).toLowerCase();
+        if (an < bn) return -1;
+        if (an > bn) return 1;
 
         var aAdm = String(a.admission_number || '');
         var bAdm = String(b.admission_number || '');
@@ -212,18 +212,19 @@ async function loadStudents() {
         }
 
         list.innerHTML = currentStudents.map(function(s) {
+            var name = getDisplayName(s);
             return '' +
                 '<div class="list-group-item">' +
                 '<div class="d-flex justify-content-between align-items-start">' +
                 '<div>' +
-                '<div class="fw-semibold">' + s.full_name + '</div>' +
-                '<small class="text-muted">' + s.admission_number + ' · ' + (s.gender || '') + ' · ' + (s.parent_phone || '') + '</small>' +
+                '<div class="fw-semibold">' + name + '</div>' +
+                '<small class="text-muted">' + (s.admission_number || '') + ' · ' + (s.gender || '') + ' · ' + (s.parent_phone || '') + '</small>' +
                 '</div>' +
                 '<div class="btn-group btn-group-sm">' +
                 '<button class="btn btn-outline-primary" title="Edit" onclick=\'startEdit(' + JSON.stringify(s) + ')\'><i class="bi bi-pencil"></i></button>' +
-                '<button class="btn btn-outline-success" title="Transfer" onclick="openTransfer(' + s.id + ', \'' + String(s.full_name).replace(/'/g, '') + '\')"><i class="bi bi-arrow-right-circle"></i></button>' +
+                '<button class="btn btn-outline-success" title="Transfer" onclick="openTransfer(' + s.id + ', \'' + name.replace(/'/g, '') + '\')"><i class="bi bi-arrow-right-circle"></i></button>' +
                 '<button class="btn btn-outline-secondary" title="History" onclick="viewHistory(' + s.id + ')"><i class="bi bi-clock-history"></i></button>' +
-                '<button class="btn btn-outline-danger" title="Remove" onclick="deleteStudent(' + s.id + ', \'' + String(s.full_name).replace(/'/g, '') + '\')"><i class="bi bi-trash"></i></button>' +
+                '<button class="btn btn-outline-danger" title="Remove" onclick="deleteStudent(' + s.id + ', \'' + name.replace(/'/g, '') + '\')"><i class="bi bi-trash"></i></button>' +
                 '</div>' +
                 '</div>' +
                 '</div>';
