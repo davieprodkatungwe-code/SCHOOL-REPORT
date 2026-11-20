@@ -141,10 +141,17 @@ let currentStudents = [];
 
 function sortStudents(students) {
     return students.slice().sort((a, b) => {
-        const last = (a.last_name || '').localeCompare(b.last_name || '', undefined, { sensitivity: 'base' });
-        if (last !== 0) return last;
-        return (a.first_name || '').localeCompare(b.first_name || '', undefined, { sensitivity: 'base' });
+        const aLast = (a.last_name || '').toLowerCase();
+        const bLast = (b.last_name || '').toLowerCase();
+        if (aLast !== bLast) return aLast.localeCompare(bLast);
+
+        const aFirst = (a.first_name || '').toLowerCase();
+        const bFirst = (b.first_name || '').toLowerCase();
+        if (aFirst !== bFirst) return aFirst.localeCompare(bFirst);
+
+        return String(a.admission_number || '').localeCompare(String(b.admission_number || ''));
     });
+}
 }
 
 async function loadClasses() {
