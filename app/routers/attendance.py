@@ -550,12 +550,18 @@ async def get_report(
     if not class_obj:
         raise HTTPException(status_code=404, detail="Class not found")
 
-    students = (
-        db.query(models.Student)
-        .filter(models.Student.class_id == class_id, models.Student.is_active == True)
-        .order_by(models.Student.last_name, models.Student.first_name)
-        .all()
+   students = (
+    db.query(models.Student)
+    .filter(models.Student.class_id == class_id, models.Student.is_active == True)
+    .all()
+)
+students = sorted(
+    students,
+    key=lambda s: (
+        (s.full_name or f"{s.first_name or ''} {s.last_name or ''}").strip().lower(),
+        s.admission_number or ""
     )
+)
     total_students = len(students)
 
     records = (
@@ -611,11 +617,17 @@ async def download_excel_report(
         raise HTTPException(status_code=404, detail="Class not found")
 
     students = (
-        db.query(models.Student)
-        .filter(models.Student.class_id == class_id, models.Student.is_active == True)
-        .order_by(models.Student.last_name, models.Student.first_name)
-        .all()
+    db.query(models.Student)
+    .filter(models.Student.class_id == class_id, models.Student.is_active == True)
+    .all()
+)
+students = sorted(
+    students,
+    key=lambda s: (
+        (s.full_name or f"{s.first_name or ''} {s.last_name or ''}").strip().lower(),
+        s.admission_number or ""
     )
+)
     total_students = len(students)
 
     records = (
