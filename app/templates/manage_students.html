@@ -174,49 +174,36 @@ async function loadClasses() {
     });
 }
 
-async function loadStudents() {
-    const classId = document.getElementById('classSelect').value;
-    if (!classId) return;
+async function loadClasses() {
+    try {
+        const res = await api('/api/classes');
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || 'Failed to load classes');
+        }
+        allClasses = await res.json();
+        const select = document.getElementById('classSelect');
+        const transferSelect = document.getElementById('transferClassSelect');
+        select.innerHTML = '<option value="">Choose a class...</option>';
+        if (transferSelect) transferSelect.innerHTML = '';
 
-    const res = await api(`/api/classes/${classId}/students`);
-    let students = await res.json();
-    currentStudents = sortStudents(students);
+        allClasses.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.name;
+            select.appendChild(opt);
 
-    document.getElementById('classTitle').textContent = document.getElementById('classSelect').selectedOptions[0].text;
-    document.getElementById('countBadge').textContent = currentStudents.length + ' students';
-
-    const list = document.getElementById('studentsList');
-    if (currentStudents.length === 0) {
-        list.innerHTML = '<div class="list-group-item text-muted text-center">No students in this class yet</div>';
-        return;
+            if (transferSelect) {
+                const opt2 = document.createElement('option');
+                opt2.value = c.id;
+                opt2.textContent = c.name;
+                transferSelect.appendChild(opt2);
+            }
+        });
+    } catch (err) {
+        alert('Could not load classes: ' + err.message);
     }
-
-    list.innerHTML = currentStudents.map(s => `
-        <div class="list-group-item">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="fw-semibold">${s.full_name}</div>
-                    <small class="text-muted">${s.admission_number} · ${s.gender || ''} · ${s.parent_phone || ''}</small>
-                </div>
-                <div class="btn-group btn-group-sm">
-                    <button class="btn btn-outline-primary" title="Edit" onclick='startEdit(${JSON.stringify(s)})'>
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-outline-success" title="Transfer" onclick="openTransfer(${s.id}, '${s.full_name.replace(/'/g, "\\'")}')">
-                        <i class="bi bi-arrow-right-circle"></i>
-                    </button>
-                    <button class="btn btn-outline-secondary" title="History" onclick="viewHistory(${s.id})">
-                        <i class="bi bi-clock-history"></i>
-                    </button>
-                    <button class="btn btn-outline-danger" title="Remove" onclick="deleteStudent(${s.id}, '${s.full_name.replace(/'/g, "\\'")}')">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            </div>
-        </div>
-    `).join('');
 }
-
 function startEdit(student) {
     document.getElementById('editStudentId').value = student.id;
     document.getElementById('admNo').value = student.admission_number || '';
