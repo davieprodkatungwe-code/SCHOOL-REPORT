@@ -140,70 +140,99 @@ let allClasses = [];
 let currentStudents = [];
 
 function sortStudents(students) {
-    return students.slice().sort((a, b) => {
-        const aLast = (a.last_name || '').toLowerCase();
-        const bLast = (b.last_name || '').toLowerCase();
-        if (aLast !== bLast) return aLast.localeCompare(bLast);
+    return students.slice().sort(function(a, b) {
+        var aLast = (a.last_name || '').toLowerCase();
+        var bLast = (b.last_name || '').toLowerCase();
+        if (aLast < bLast) return -1;
+        if (aLast > bLast) return 1;
 
-        const aFirst = (a.first_name || '').toLowerCase();
-        const bFirst = (b.first_name || '').toLowerCase();
-        if (aFirst !== bFirst) return aFirst.localeCompare(bFirst);
+        var aFirst = (a.first_name || '').toLowerCase();
+        var bFirst = (b.first_name || '').toLowerCase();
+        if (aFirst < bFirst) return -1;
+        if (aFirst > bFirst) return 1;
 
-        return String(a.admission_number || '').localeCompare(String(b.admission_number || ''));
-    });
-}
-}
-
-async function loadClasses() {
-    const res = await api('/api/classes');
-    allClasses = await res.json();
-    const select = document.getElementById('classSelect');
-    const transferSelect = document.getElementById('transferClassSelect');
-    select.innerHTML = '<option value="">Choose a class...</option>';
-    transferSelect.innerHTML = '';
-    allClasses.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c.id;
-        opt.textContent = c.name;
-        select.appendChild(opt);
-
-        const opt2 = document.createElement('option');
-        opt2.value = c.id;
-        opt2.textContent = c.name;
-        transferSelect.appendChild(opt2);
+        var aAdm = String(a.admission_number || '');
+        var bAdm = String(b.admission_number || '');
+        if (aAdm < bAdm) return -1;
+        if (aAdm > bAdm) return 1;
+        return 0;
     });
 }
 
 async function loadClasses() {
     try {
-        const res = await api('/api/classes');
+        var res = await api('/api/classes');
         if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
+            var err = await res.json().catch(function() { return {}; });
             throw new Error(err.detail || 'Failed to load classes');
         }
         allClasses = await res.json();
-        const select = document.getElementById('classSelect');
-        const transferSelect = document.getElementById('transferClassSelect');
-        select.innerHTML = '<option value="">Choose a class...</option>';
-        if (transferSelect) transferSelect.innerHTML = '';
 
-        allClasses.forEach(c => {
-            const opt = document.createElement('option');
+        var select = document.getElementById('classSelect');
+        var transferSelect = document.getElementById('transferClassSelect');
+        select.innerHTML = '<option value="">Choose a class...</option>';
+        transferSelect.innerHTML = '';
+
+        allClasses.forEach(function(c) {
+            var opt = document.createElement('option');
             opt.value = c.id;
             opt.textContent = c.name;
             select.appendChild(opt);
 
-            if (transferSelect) {
-                const opt2 = document.createElement('option');
-                opt2.value = c.id;
-                opt2.textContent = c.name;
-                transferSelect.appendChild(opt2);
-            }
+            var opt2 = document.createElement('option');
+            opt2.value = c.id;
+            opt2.textContent = c.name;
+            transferSelect.appendChild(opt2);
         });
     } catch (err) {
         alert('Could not load classes: ' + err.message);
     }
 }
+
+async function loadStudents() {
+    var classId = document.getElementById('classSelect').value;
+    if (!classId) return;
+
+    try {
+        var res = await api('/api/classes/' + classId + '/students');
+        if (!res.ok) {
+            var err = await res.json().catch(function() { return {}; });
+            throw new Error(err.detail || 'Failed to load students');
+        }
+        var students = await res.json();
+        currentStudents = sortStudents(students);
+
+        document.getElementById('classTitle').textContent = document.getElementById('classSelect').selectedOptions[0].text;
+        document.getElementById('countBadge').textContent = currentStudents.length + ' students';
+
+        var list = document.getElementById('studentsList');
+        if (currentStudents.length === 0) {
+            list.innerHTML = '<div class="list-group-item text-muted text-center">No students in this class yet</div>';
+            return;
+        }
+
+        list.innerHTML = currentStudents.map(function(s) {
+            return '' +
+                '<div class="list-group-item">' +
+                '<div class="d-flex justify-content-between align-items-start">' +
+                '<div>' +
+                '<div class="fw-semibold">' + s.full_name + '</div>' +
+                '<small class="text-muted">' + s.admission_number + ' · ' + (s.gender || '') + ' · ' + (s.parent_phone || '') + '</small>' +
+                '</div>' +
+                '<div class="btn-group btn-group-sm">' +
+                '<button class="btn btn-outline-primary" title="Edit" onclick=\'startEdit(' + JSON.stringify(s) + ')\'><i class="bi bi-pencil"></i></button>' +
+                '<button class="btn btn-outline-success" title="Transfer" onclick="openTransfer(' + s.id + ', \'' + String(s.full_name).replace(/'/g, '') + '\')"><i class="bi bi-arrow-right-circle"></i></button>' +
+                '<button class="btn btn-outline-secondary" title="History" onclick="viewHistory(' + s.id + ')"><i class="bi bi-clock-history"></i></button>' +
+                '<button class="btn btn-outline-danger" title="Remove" onclick="deleteStudent(' + s.id + ', \'' + String(s.full_name).replace(/'/g, '') + '\')"><i class="bi bi-trash"></i></button>' +
+                '</div>' +
+                '</div>' +
+                '</div>';
+        }).join('');
+    } catch (err) {
+        alert('Could not load students: ' + err.message);
+    }
+}
+
 function startEdit(student) {
     document.getElementById('editStudentId').value = student.id;
     document.getElementById('admNo').value = student.admission_number || '';
@@ -232,14 +261,14 @@ function cancelEdit() {
 }
 
 async function saveStudent() {
-    const classId = document.getElementById('classSelect').value;
-    const editId = document.getElementById('editStudentId').value;
-    const admNo = document.getElementById('admNo').value.trim();
-    const firstName = document.getElementById('firstName').value.trim();
-    const lastName = document.getElementById('lastName').value.trim();
-    const gender = document.getElementById('gender').value;
-    const parentPhone = document.getElementById('parentPhone').value.trim();
-    const parentName = document.getElementById('parentName').value.trim();
+    var classId = document.getElementById('classSelect').value;
+    var editId = document.getElementById('editStudentId').value;
+    var admNo = document.getElementById('admNo').value.trim();
+    var firstName = document.getElementById('firstName').value.trim();
+    var lastName = document.getElementById('lastName').value.trim();
+    var gender = document.getElementById('gender').value;
+    var parentPhone = document.getElementById('parentPhone').value.trim();
+    var parentName = document.getElementById('parentName').value.trim();
 
     if (!classId) {
         alert('Please select a class first');
@@ -250,7 +279,7 @@ async function saveStudent() {
         return;
     }
 
-    const body = {
+    var body = {
         admission_number: admNo,
         first_name: firstName,
         last_name: lastName,
@@ -261,9 +290,9 @@ async function saveStudent() {
     };
 
     try {
-        let res;
+        var res;
         if (editId) {
-            res = await api(`/api/students/${editId}`, {
+            res = await api('/api/students/' + editId, {
                 method: 'PUT',
                 body: JSON.stringify(body)
             });
@@ -273,7 +302,7 @@ async function saveStudent() {
                 body: JSON.stringify(body)
             });
         }
-        const data = await res.json();
+        var data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Failed to save student');
         alert(data.message || 'Saved successfully');
         cancelEdit();
@@ -286,8 +315,8 @@ async function saveStudent() {
 async function deleteStudent(id, name) {
     if (!confirm('Remove student "' + name + '" from the system?')) return;
     try {
-        const res = await api('/api/students/' + id, { method: 'DELETE' });
-        const data = await res.json();
+        var res = await api('/api/students/' + id, { method: 'DELETE' });
+        var data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Failed to delete');
         alert(data.message);
         loadStudents();
@@ -304,11 +333,11 @@ function openTransfer(id, name) {
 }
 
 async function confirmTransfer() {
-    const studentId = document.getElementById('transferStudentId').value;
-    const newClassId = document.getElementById('transferClassSelect').value;
-    const year = document.getElementById('transferYear').value;
-    const academicYear = document.getElementById('transferAcademicYear').value.trim();
-    const notes = document.getElementById('transferNotes').value.trim();
+    var studentId = document.getElementById('transferStudentId').value;
+    var newClassId = document.getElementById('transferClassSelect').value;
+    var year = document.getElementById('transferYear').value;
+    var academicYear = document.getElementById('transferAcademicYear').value.trim();
+    var notes = document.getElementById('transferNotes').value.trim();
 
     if (!newClassId || !year) {
         alert('Please select new class and year');
@@ -316,12 +345,12 @@ async function confirmTransfer() {
     }
 
     try {
-        let url = '/api/students/' + studentId + '/transfer?new_class_id=' + newClassId + '&year=' + year;
+        var url = '/api/students/' + studentId + '/transfer?new_class_id=' + newClassId + '&year=' + year;
         if (academicYear) url += '&academic_year=' + encodeURIComponent(academicYear);
         if (notes) url += '&notes=' + encodeURIComponent(notes);
 
-        const res = await api(url, { method: 'POST' });
-        const data = await res.json();
+        var res = await api(url, { method: 'POST' });
+        var data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Transfer failed');
         alert(data.message);
         bootstrap.Modal.getInstance(document.getElementById('transferModal')).hide();
@@ -332,13 +361,13 @@ async function confirmTransfer() {
 }
 
 async function viewHistory(studentId) {
-    const modal = new bootstrap.Modal(document.getElementById('historyModal'));
+    var modal = new bootstrap.Modal(document.getElementById('historyModal'));
     document.getElementById('historyBody').innerHTML = 'Loading...';
     modal.show();
 
     try {
-        const res = await api('/api/students/' + studentId + '/history');
-        const data = await res.json();
+        var res = await api('/api/students/' + studentId + '/history');
+        var data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Failed to load history');
 
         document.getElementById('historyTitle').textContent = 'History – ' + data.full_name;
@@ -352,22 +381,22 @@ async function viewHistory(studentId) {
 
         document.getElementById('historyBody').innerHTML =
             '<p><strong>Current class:</strong> ' + (data.current_class || 'N/A') + '</p><hr>' +
-            data.history.map(h =>
-                '<div class="mb-2">' +
-                '<div class="fw-semibold">' + h.class_name + '</div>' +
-                '<small class="text-muted">Year: ' + h.year +
-                (h.academic_year ? ' (' + h.academic_year + ')' : '') + '</small>' +
-                (h.notes ? '<div class="small">' + h.notes + '</div>' : '') +
-                '</div>'
-            ).join('');
+            data.history.map(function(h) {
+                return '<div class="mb-2">' +
+                    '<div class="fw-semibold">' + h.class_name + '</div>' +
+                    '<small class="text-muted">Year: ' + h.year +
+                    (h.academic_year ? ' (' + h.academic_year + ')' : '') + '</small>' +
+                    (h.notes ? '<div class="small">' + h.notes + '</div>' : '') +
+                    '</div>';
+            }).join('');
     } catch (err) {
         document.getElementById('historyBody').innerHTML = '<div class="text-danger">' + err.message + '</div>';
     }
 }
 
 async function uploadExcel() {
-    const classId = document.getElementById('classSelect').value;
-    const fileInput = document.getElementById('excelFile');
+    var classId = document.getElementById('classSelect').value;
+    var fileInput = document.getElementById('excelFile');
 
     if (!classId) {
         alert('Please select a class first');
@@ -378,17 +407,17 @@ async function uploadExcel() {
         return;
     }
 
-    const formData = new FormData();
+    var formData = new FormData();
     formData.append('file', fileInput.files[0]);
 
     try {
-        const token = getToken();
-        const res = await fetch('/api/students/import-excel?class_id=' + classId, {
+        var token = getToken();
+        var res = await fetch('/api/students/import-excel?class_id=' + classId, {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + token },
             body: formData
         });
-        const data = await res.json();
+        var data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Import failed');
         alert(data.message + '\nAdded: ' + data.added + '\nSkipped: ' + data.skipped);
         fileInput.value = '';
