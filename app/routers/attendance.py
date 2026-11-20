@@ -23,17 +23,23 @@ async def get_classes(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(auth.get_current_user)
 ):
-    classes = db.query(models.Class).order_by(models.Class.form, models.Class.stream).all()
-    result = []
-    for c in classes:
-        result.append({
-            "id": c.id,
-            "name": c.name,
-            "form": c.form,
-            "stream": c.stream
-        })
-    return result
-
+    try:
+        classes = (
+            db.query(models.Class)
+            .order_by(models.Class.form.asc(), models.Class.stream.asc(), models.Class.name.asc())
+            .all()
+        )
+        result = []
+        for c in classes:
+            result.append({
+                "id": c.id,
+                "name": c.name or "",
+                "form": c.form,
+                "stream": c.stream or ""
+            })
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load classes: {str(e)}")
 
 @router.get("/classes-with-teachers")
 async def get_classes_with_teachers(
