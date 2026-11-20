@@ -560,7 +560,7 @@ students = sorted(
     key=lambda s: (
         (s.full_name or f"{s.first_name or ''} {s.last_name or ''}").strip().lower(),
         s.admission_number or ""
-    )
+    
 )
     total_students = len(students)
 
@@ -627,7 +627,6 @@ students = sorted(
         (s.full_name or f"{s.first_name or ''} {s.last_name or ''}").strip().lower(),
         s.admission_number or ""
     )
-)
     total_students = len(students)
 
     records = (
