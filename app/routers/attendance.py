@@ -100,9 +100,20 @@ async def get_students_for_class(
             models.Student.class_id == class_id,
             models.Student.is_active == True
         )
-        .order_by(models.Student.last_name, models.Student.first_name)
+        .order_by(
+            models.Student.last_name.asc(),
+            models.Student.first_name.asc(),
+            models.Student.admission_number.asc()
+        )
         .all()
     )
+
+    # Also sort in Python by full name (extra safety)
+    students = sorted(
+        students,
+        key=lambda s: ((s.last_name or "").lower(), (s.first_name or "").lower(), s.admission_number or "")
+    )
+
     result = []
     for s in students:
         result.append({
@@ -117,7 +128,6 @@ async def get_students_for_class(
             "class_id": s.class_id
         })
     return result
-
 
 @router.post("/students")
 async def create_student(
